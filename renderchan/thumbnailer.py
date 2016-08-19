@@ -196,11 +196,23 @@ class Thumbnailer:
         size = str(self.width) + "x" + str(self.height)
         return ["convert", str(src), "-thumbnail", size+"^", "-gravity", "center", "-extent", size, str(dest)]
 
+    def command_template_thumbnail(self, src = None, dest = None):
+        if not src: src = "png:-"
+        if not dest: dest = "png:-"
+        size = str(self.width) + "x" + str(self.height)
+        return ["convert", str(src), "-thumbnail", size, "-gravity", "center", "-compose", "copy", "-extent", size, str(dest)]
+
     def command_icon(self, icon, src = None, dest = None):
         if not src: src = "png:-"
         if not dest: dest = "png:-"
         size = str(self.icon_size) + "x" + str(self.icon_size)
         return ["composite", "-gravity", "SouthEast", "-geometry", size+"+0+0", icon, str(src), str(dest)]
+
+    def command_composite(self, img = None, src = None, dest = None):
+        if not img: img = "png:-"
+        if not src: src = "png:-"
+        if not dest: dest = "png:-"
+        return ["composite", str(img), str(src), str(dest)]
 
     def command_video_frame(self, seek, src = None, dest = None):
         if not src: src = "-"
@@ -364,7 +376,12 @@ class Thumbnailer:
                     
         if bestFileSrc:
             #print(_("Main file for '%s' is '%s', deps %s, back-deps %s") % (src, bestFileSrc[len(src):], bestDepsCount, bestBackDepsExists))
-            return self.build_thumbnail_any(bestFileSrc, bestFileRender, dest, icon)
+            processed, success = self.build_thumbnail_any(bestFileSrc, bestFileRender, dest, None)
+            if icon and processed and success:
+                success = self.run_pipe([
+                    self.command_template_thumbnail(src = icon),
+                    self.command_composite(src = dest, dest = dest) ])
+            return processed, success;
         else:
             return False, True 
 

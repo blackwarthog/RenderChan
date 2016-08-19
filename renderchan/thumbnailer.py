@@ -200,7 +200,7 @@ class Thumbnailer:
         if not src: src = "png:-"
         if not dest: dest = "png:-"
         size = str(self.width) + "x" + str(self.height)
-        return ["convert", str(src), "-thumbnail", size, "-gravity", "center", "-compose", "copy", "-extent", size, str(dest)]
+        return ["convert", str(src), "-thumbnail", size, "-background", "white", "-gravity", "center", "-compose", "copy", "-extent", size, str(dest)]
 
     def command_icon(self, icon, src = None, dest = None):
         if not src: src = "png:-"

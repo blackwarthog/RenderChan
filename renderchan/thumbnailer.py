@@ -366,7 +366,7 @@ class Thumbnailer:
                             backDepsExists = True
                 if ( not bestFileSrc
                      or (bestFileSrc and bestIsMain < isMain)
-                     or (bestFileSrc and bestIsMain == isMain and not bestBackDepsExists < backDepsExists)
+                     or (bestFileSrc and bestIsMain == isMain and not bestBackDepsExists and backDepsExists)
                      or (bestFileSrc and bestIsMain == isMain and bestBackDepsExists == backDepsExists and bestDepsCount < depsCount) ):
                     bestFileSrc = fileSrc
                     bestFileRender = fileRender

@@ -137,7 +137,7 @@ class Launcher:
                 elif command[0] == "log":
                     prev = self.logFile
                     self.logFile = os.path.abspath(command[1]) if command[1] != "-" else "-"
-                    if self.logFile != prev:
+                    if self.logFile != prev:<
                         self.info(_("Start log"))
                 elif command[0] == "out":
                     self.outputFile = os.path.abspath(command[1]) if command[1] != "-" else "-"
@@ -174,12 +174,6 @@ class Launcher:
         if not self.sourceDir:
             self.error(_("Source directory is not set"))
             return
-        if not self.mountDir:
-            self.error(_("Mount directory is not set"))
-            return
-        if not self.renderDir:
-            self.error(_("Render directory is not set"))
-            return
 
         self.umountAll()
 
@@ -193,12 +187,14 @@ class Launcher:
             self.warning(_("No projects found"))
             return
         
-        try:        
-            self.createDirectory(self.mountDir)
-            self.mount(self.mountDir, self.sourceDir)
-        except Exception as e:
-            self.error(_("Cannot mount source directory %s, error: %s") % (self.sourceDir, str(e)))
+        if self.mountDir:
+            try:        
+                self.createDirectory(self.mountDir)
+                self.mount(self.mountDir, self.sourceDir)
+                except Exception as e:
+                    self.error(_("Cannot mount source directory %s, error: %s") % (self.sourceDir, str(e)))
             
+        workDir = self.mountDir if self.mountDir else self.sourceDir
         prepared = []
         for project in projects:
             self.info(_("Prepare project: ") + project)
@@ -207,14 +203,14 @@ class Launcher:
                 while len(projectLocal) and projectLocal[0] == os.path.sep:
                     projectLocal = projectLocal[1:]
                 
-                renderDir = os.path.join(self.renderDir, projectLocal)
-                mountDir = os.path.join(self.mountDir, projectLocal)
-                
-                self.createDirectory(renderDir)
-                self.createDirectory(os.path.join(mountDir, "render"))
-                self.mount(os.path.join(mountDir, "render"), renderDir)
-            
-                prepared.append(mountDir)
+                projectWorkDir = os.path.join(workDir, projectLocal)
+                if self.renderDir:
+                    renderDir = os.path.join(self.renderDir, projectLocal)
+                    self.createDirectory(renderDir)
+                    self.createDirectory(os.path.join(projectWorkDir, "render"))
+                    self.mount(os.path.join(projectWorkDir, "render"), renderDir)
+           
+                prepared.append(projectWorkDir)
             except Exception as e:
                 self.error(_("Cannot prepare project %s, error: %s") % (project, str(e)))
         self.projects = []

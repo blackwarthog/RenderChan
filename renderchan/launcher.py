@@ -137,7 +137,7 @@ class Launcher:
                 elif command[0] == "log":
                     prev = self.logFile
                     self.logFile = os.path.abspath(command[1]) if command[1] != "-" else "-"
-                    if self.logFile != prev:<
+                    if self.logFile != prev:
                         self.info(_("Start log"))
                 elif command[0] == "out":
                     self.outputFile = os.path.abspath(command[1]) if command[1] != "-" else "-"
@@ -191,8 +191,8 @@ class Launcher:
             try:        
                 self.createDirectory(self.mountDir)
                 self.mount(self.mountDir, self.sourceDir)
-                except Exception as e:
-                    self.error(_("Cannot mount source directory %s, error: %s") % (self.sourceDir, str(e)))
+            except Exception as e:
+                self.error(_("Cannot mount source directory %s, error: %s") % (self.sourceDir, str(e)))
             
         workDir = self.mountDir if self.mountDir else self.sourceDir
         prepared = []

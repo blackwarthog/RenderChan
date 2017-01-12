@@ -1,3 +1,4 @@
+from audioop import reverse
 __author__ = 'Ivan Mahonin'
 
 from gettext import gettext as _
@@ -14,6 +15,7 @@ class Thumbnailer:
     def __init__(self):
         self.srcdir = os.path.abspath(".")
         self.renderdir = os.path.join(self.srcdir, "render")
+        self.renderdirname = "render"
         self.thumbdir = self.renderdir
         self.coreDatadir = ""
         self.icons = {}
@@ -29,6 +31,8 @@ class Thumbnailer:
 
         self.dep_trees = {}
         self.dep_tree_roots = []
+        
+        self.thumbs = {}
         
         self.check_executable(["ffmpeg",    "-version"], "FFMpeg")
         self.check_executable(["ffprobe",   "-version"], "FFMpeg")
@@ -146,12 +150,12 @@ class Thumbnailer:
             return False
         if os.path.isfile(src) and path[-len(self.suffix):].lower() == self.suffix:
             return True
-        if src == self.renderdir and path != "":
+        if self.renderdir and src == self.renderdir and path != "":
             return True
         if src == self.thumbdir and path != "":
             return True
         
-        render = os.path.join(self.renderdir, path) if path != "" else self.renderdir
+        render = None
         dest = os.path.join(self.thumbdir, path + self.suffix) if path != "" else self.thumbdir + self.suffix
         icon = self.find_icon(src)
 
@@ -159,27 +163,51 @@ class Thumbnailer:
             for file in sorted(os.listdir(src)):
                 self.build_thumbnails(os.path.join(path, file))
 
-        processed, success = self.build_thumbnail_any(src, render, dest, icon)
+        if src == self.srcdir:
+            return True
 
+        found = False
+        processed = False
+        success = True
+        if not found and self.renderdir:
+            render = os.path.join(self.renderdir, path) if path != "" else self.renderdir
+            found, processed, success = self.build_thumbnail_any(src, render, dest, icon)
+        if not found and self.renderdirname:
+            parent_path = src
+            while not found:
+                prev_parent_path = parent_path
+                parent_path = os.path.dirname(parent_path)
+                if prev_parent_path == parent_path:
+                    break
+                render = os.path.join(parent_path, self.renderdirname + src[len(parent_path):])
+                found, processed, success = self.build_thumbnail_any(src, render, dest, icon)
+
+        if not found:
+            print(_("Cannot find rendered data for: %s") % src)
         if not success:
             print(_("Failed to create thumbnail(s) for: %s") % src)
         elif processed:
             print(_("Created thumbnail(s) for: %s") % src)
+            
+        if found and success and render:
+            self.thumbs[src] = { "thumb": dest, "render": render }
+            
         return success
 
     def build_thumbnail_any(self, src, render, dest, icon):
         found = False
         processed = False
         success = True
-        if not found:
-            found, processed, success = self.build_thumbnail(src, dest, icon)
-        if not found:
-            found, processed, success = self.build_thumbnail(render + ".png", dest, icon)
-        if not found:
-            found, processed, success = self.build_thumbnail(render + ".avi", dest, icon)
-        if not found and src != self.srcdir and os.path.isdir(src):
-            found, processed, success = (True,) + self.build_thumbnail_directory(src, dest, icon)
-        return processed, success
+        if src != render:
+            if not found:
+                found, processed, success = self.build_thumbnail(src, dest, icon)
+            if not found:
+                found, processed, success = self.build_thumbnail(render + ".png", dest, icon)
+            if not found:
+                found, processed, success = self.build_thumbnail(render + ".avi", dest, icon)
+            if not found and os.path.isdir(src):
+                found, processed, success = (True,) + self.build_thumbnail_directory(src, dest, icon)
+        return found, processed, success
 
     def build_thumbnail(self, src, dest, icon):
         if os.path.isfile(src) and src[-4:].lower() == ".png":
@@ -321,8 +349,6 @@ class Thumbnailer:
 
     def build_thumbnail_directory(self, src, dest, icon):
         srcPrefix = src + os.path.sep
-        destPath = self.thumbdir + src[len(self.srcdir):]
-        renderPath = self.renderdir + src[len(self.srcdir):]
         
         tree = self.get_dep_tree(src)
         root = src in self.dep_tree_roots
@@ -340,29 +366,29 @@ class Thumbnailer:
         bestBackDepsExists = False
         bestDepsCount = 0
 
-        doAppend = True
         files = []
-        for f in sorted(os.listdir(src)):
-            if doAppend:
-                files.append(f)
-            else:
-                files.insert(0, f)
-            doAppend = not doAppend 
+        files_orig = sorted(os.listdir(src)); 
+        while files_orig:
+            files.append(files_orig.pop(len(files_orig)//2))
+        print(files)
         
         for f in files:
             fileSrc = os.path.join(src, f)
-            fileDest = os.path.join(destPath, f + self.suffix)
-            fileRender = os.path.join(renderPath, f)
+            if fileSrc not in self.thumbs:
+                continue
+            fileDest = self.thumbs[fileSrc]["thumb"]
+            fileRender = self.thumbs[fileSrc]["render"]
+            fileRenderDir = os.path.dirname(fileRender)
             if os.path.isfile(fileDest):
                 isMain = f == mainfile
                 depsCount = 0
                 backDepsExists = root
                 if fileSrc in tree:
                     for dep in tree[fileSrc]["fullDeps"]:
-                        if dep[0:len(srcPrefix)] == srcPrefix or dep[0:len(renderPath)] == renderPath:
+                        if dep[0:len(srcPrefix)] == srcPrefix or dep[0:len(fileRenderDir)] == fileRenderDir:
                             depsCount += 1
                     for dep in tree[fileSrc]["backDeps"]:
-                        if dep[0:len(srcPrefix)] != srcPrefix and dep[0:len(renderPath)] != renderPath:
+                        if dep[0:len(srcPrefix)] != srcPrefix and dep[0:len(fileRenderDir)] != fileRenderDir:
                             backDepsExists = True
                 if ( not bestFileSrc
                      or (bestFileSrc and bestIsMain < isMain)
@@ -376,7 +402,7 @@ class Thumbnailer:
                     
         if bestFileSrc:
             #print(_("Main file for '%s' is '%s', deps %s, back-deps %s") % (src, bestFileSrc[len(src):], bestDepsCount, bestBackDepsExists))
-            processed, success = self.build_thumbnail_any(bestFileSrc, bestFileRender, dest, None)
+            _, processed, success = self.build_thumbnail_any(bestFileSrc, bestFileRender, dest, None)
             if icon and processed and success:
                 success = self.run_pipe([
                     self.command_template_thumbnail(src = icon),
@@ -395,6 +421,10 @@ def process_args():
             action="store",
             default="",
             help=_("A path to the rendered files."))
+    parser.add_argument("--renderdirname", dest="renderdirname",
+            action="store",
+            default="render",
+            help=_("Name (part of path) of directory with rendered data"))
     parser.add_argument("--thumbdir", dest="thumbdir",
             action="store",
             default="",
@@ -444,9 +474,10 @@ def main(datadir, argv):
     
     thumbnailer = Thumbnailer()
     
-    srcdir       = os.path.abspath(args.srcdir)    if args.srcdir    else thumbnailer.srcdir
-    renderdir    = os.path.abspath(args.renderdir) if args.renderdir else os.path.join(srcdir, "render") 
-    thumbdir     = os.path.abspath(args.thumbdir)  if args.thumbdir  else renderdir
+    srcdir        = os.path.abspath(args.srcdir)    if args.srcdir    else thumbnailer.srcdir
+    renderdir     = os.path.abspath(args.renderdir) if args.renderdir or args.renderdirname else os.path.join(srcdir, "render") 
+    renderdirname = args.renderdirname
+    thumbdir      = os.path.abspath(args.thumbdir)  if args.thumbdir  else renderdir
     
     suffix       = args.suffix if args.suffix else thumbnailer.suffix
     
@@ -480,16 +511,17 @@ def main(datadir, argv):
     if not icon_size:
         icon_size = math.ceil(min(width, height)*0.01*icon_percent)
     
-    thumbnailer.srcdir    = srcdir
-    thumbnailer.renderdir = renderdir
-    thumbnailer.thumbdir  = thumbdir
-    thumbnailer.suffix    = suffix
-    thumbnailer.width     = width
-    thumbnailer.height    = height
-    thumbnailer.icon_size = icon_size
-    thumbnailer.force     = force
-    thumbnailer.dry_run   = dry_run
-    thumbnailer.clean     = clean
+    thumbnailer.srcdir        = srcdir
+    thumbnailer.renderdir     = renderdir
+    thumbnailer.renderdirname = renderdirname
+    thumbnailer.thumbdir      = thumbdir
+    thumbnailer.suffix        = suffix
+    thumbnailer.width         = width
+    thumbnailer.height        = height
+    thumbnailer.icon_size     = icon_size
+    thumbnailer.force         = force
+    thumbnailer.dry_run       = dry_run
+    thumbnailer.clean         = clean
     for f in os.listdir(datadir):
         if f[-4:].lower() == ".png":
             thumbnailer.icons["." + f[0:-4].lower()] = os.path.join(datadir, f)

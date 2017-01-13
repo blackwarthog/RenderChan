@@ -152,6 +152,8 @@ class Thumbnailer:
             return True
         if self.renderdir and src == self.renderdir and path != "":
             return True
+        if self.renderdirname and os.path.sep + self.renderdirname + os.path.sep in src:
+            return True
         if src == self.thumbdir and path != "":
             return True
         
@@ -275,7 +277,7 @@ class Thumbnailer:
         command = ["ffprobe", "-i",  str(src), "-show_entries",  "format=duration", "-of", "csv=p=0"]
         try:
             return float(subprocess.check_output(command).decode("utf-8"))
-        except subprocess.CalledProcessError:
+        except (subprocess.CalledProcessError, ValueError):
             print(_("Command complete with errors: %s") % str(command))
             return -1
 
